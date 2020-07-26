@@ -15,6 +15,9 @@ html {
 </style>
 </head>
 <body>
+  <p>
+  Mosaic images created from album covers. GitHub source available <a href="https://github.com/mwdchang/song-tiles">Here</a>
+  </p>
   <div id="label"></div>
   <div style="display:flex; margin: 5px 0px">
     <div id="person-dropdown" style="display: none"></div>
@@ -136,7 +139,6 @@ async function load() {
     });
   }
   d3.select('#label').node().innerHTML = `
-  Mosaic images created from album covers. <br>
   Hover on the tiles to see full image
   `;
   
