@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Song Tiles</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.19/lodash.min.js"></script>
+<script src="https://gitcdn.link/repo/mwdchang/image-util/master/image-util.js"></script>
+<script src="images.js"></script>
+<script src="source-images.js"></script>
+<style>
+html {
+  font-family: 'Roboto', sans-serif;
+}
+</style>
+</head>
+<body>
+  <div id="label"></div>
+  <div style="display:flex; margin: 5px 0px">
+    <div id="person-dropdown" style="display: none"></div>
+    &nbsp; &nbsp;
+    <div id="size-dropdown" style="display: none"></div>
+  </div>
+  <canvas id="original"></canvas>
+  <canvas id="tiles"></canvas>
+  <canvas id="drilldown"></canvas>
+</body>
+<script>
+const SIZE = 400;
+let tileSize = 20;
+
+let rawIndex = 0;
+
+const tileImages = [];
+const lookup = [];
+
+const canvasCtx = (id) => {
+  const canvas = document.getElementById(id);
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  return ctx;
+}
+
+const findBestImage = (tileImages, target) => {
+  let r = tileImages[0];
+  let dist = 999999999;
+  for (let i = 0; i < tileImages.length; i++) {
+    const d = ImageUtil.distance(target, tileImages[i].data);
+    if (d < dist) {
+      dist = d;
+      r = tileImages[i];
+    }
+  }
+  return r;
+};
+
+const drawRGBA = (ctx, data, w, h, x = 0, y = 0) => {
+  const imageData = ctx.createImageData(w, h);
+  for (let i = 0; i < data.length; i ++) {
+    const v = data[i];
+    imageData.data[i] = v;
+  }
+  ctx.putImageData(imageData, x , y);
+}
+
+async function runTiles(rawImgeURL) {
+  const image = await ImageUtil.loadImage(rawImgeURL, { width: SIZE, height: SIZE });
+  drawRGBA(ctxRaw, image.data, SIZE, SIZE);
+
+  for (let i = 0; i < tileImages.length; i++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    drawRGBA(ctx, tileImages[i].full, SIZE, SIZE);
+
+    const canvas2 = document.createElement('canvas');
+    canvas2.width = tileSize;
+    canvas2.height = tileSize;
+    const ctx2 = canvas2.getContext('2d');
+    ctx2.drawImage(canvas, 0, 0, tileSize, tileSize);        
+    const imageData = ctx2.getImageData(0, 0, tileSize, tileSize);
+    tileImages[i].data = imageData.data;
+  }
+
+  const num = SIZE / tileSize;
+  for (let i = 0; i < num; i++) {
+    for (let j = 0; j < num; j++) {
+      const tile = ImageUtil.crop(image.data, 
+        { width: SIZE, height: SIZE, channels: 4 }, 
+        { x: i * tileSize, y: j * tileSize, width: tileSize, height: tileSize});
+
+      const match = findBestImage(tileImages, tile);
+      lookup.push({
+        data: match.full,
+        x: i * tileSize,
+        y: j * tileSize
+      });
+      // Need to swap row and column
+      drawRGBA(ctx, match.data, tileSize, tileSize, j*tileSize, i*tileSize);
+    }
+  }
+
+  d3.select('#tiles')
+    .on('mousemove', function() {
+      const coord = d3.mouse(this);
+      for (let i = 0; i < lookup.length; i++) {
+        if (coord[1] >= lookup[i].x &&
+            coord[1] <= lookup[i].x + tileSize  &&
+            coord[0] >= lookup[i].y &&
+            coord[0] <= lookup[i].y + tileSize) {
+          drawRGBA(ctxDrilldown, lookup[i].data, SIZE, SIZE);
+        }
+      }
+    });
+}
+
+const ctxRaw = canvasCtx('original');
+const ctx = canvasCtx('tiles');
+const ctxDrilldown = canvasCtx('drilldown');
+async function load() {
+
+  const candidates = _.take(_.shuffle(imageURLs), 150);
+  for (let i = 0; i < candidates.length; i++) {
+    d3.select('#label').node().innerHTML = `Loading ... ${i+1} / ${candidates.length}`;
+    // const image = await ImageUtil.loadImage(imageURLs[i], { width: tileSize, height: tileSize });
+    const full = await ImageUtil.loadImage(imageURLs[i], { width: SIZE, height: SIZE });
+
+    tileImages.push({
+      url: imageURLs[i],
+      // data: image.data,
+      full: full.data
+    });
+  }
+  d3.select('#label').node().innerHTML = `
+  Mosaic images created from album covers. <br>
+  Hover on the tiles to see full image
+  `;
+  
+
+  // Set up options
+  const personSelect = d3.select('#person-dropdown').style('display', null).append('select');
+  personSelect.selectAll('option')
+    .data(sourceImages)
+    .enter()
+    .append('option')
+    .text(d => d.name)
+    .attr('value', d => d.value);
+
+  personSelect.on('change', function() {
+    rawIndex = this.selectedIndex;
+    runTiles(sourceImages[this.selectedIndex].imageURL);
+  });
+
+  const sizeSelect = d3.select('#size-dropdown').style('display', null).append('select');
+  const sizes = [20, 15, 10];
+  sizeSelect.selectAll('option')
+    .data(sizes)
+    .enter()
+    .append('option')
+    .text(d => `${d} x ${d}`)
+    .attr('value', d => d);
+
+  sizeSelect.on('change', function() {
+    tileSize = sizes[this.selectedIndex];
+    console.log('!!', tileSize);
+    runTiles(sourceImages[rawIndex].imageURL);
+  });
+
+  runTiles(sourceImages[0].imageURL);
+}
+load();
+</script>
+</html>
