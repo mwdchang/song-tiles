@@ -1,6 +1,10 @@
 ## Song Tiles
 Automatocially composing an image mosaic using albumg cover arts.
 
+
+![alt text](https://github.com/mwdchang/song-tiles/raw/master/preview.png "Preview")
+
+
 Image data manipulation done via my image utilities in https://github.com/mwdchang/image-util
 
 ### Customization
